@@ -134,8 +134,27 @@ internal class Navigator(
 
     /** The tabs for [entry], created with [roots] the first time (or restored). */
     fun tabsFor(entry: Entry, roots: List<Screen>): Tabs {
+        checkTabs(entry, roots)
         entry.tabs?.let { if (it.stacks.size == roots.size) return it }
         return Tabs(roots, clock()).also { entry.tabs = it }
+    }
+
+    /** Catches tabs that would draw themselves forever, which otherwise ends in an OutOfMemoryError. */
+    private fun checkTabs(entry: Entry, roots: List<Screen>) {
+        val name = entry.screen::class.simpleName ?: entry.screen.toString()
+        check(entry.screen !in roots) {
+            "$name shows SnapTabs with $name as one of its tabs, so the tab would show SnapTabs again, forever. " +
+                "Show the tabs from a screen of their own:\n" +
+                "    @Serializable object MainTabs : Screen {\n" +
+                "        @Composable override fun Content() = SnapTabs(Tab($name, ...), ...)\n" +
+                "    }\n" +
+                "and open that one instead, e.g. nav.reset(MainTabs)."
+        }
+        val inTab = root.any { screen -> screen.tabs?.stacks?.any { stack -> stack.any { it === entry } } == true }
+        check(!inTab) {
+            "$name shows SnapTabs, but it's already inside a tab. Tabs inside tabs aren't supported: " +
+                "show SnapTabs from a screen that isn't a tab, like the one you open after logging in."
+        }
     }
 
     private fun SnapshotStateList<Entry>.pop(result: Any? = null) {

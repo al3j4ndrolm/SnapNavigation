@@ -71,6 +71,8 @@ Use it as the whole app, or inside a screen after a login:
 nav.reset(Main)   // after logging in; nav.reset(Login) to log out
 ```
 
+`Main` only holds the tabs. It can't be one of its own tabs, or each tab would show the tabs again; SnapNavigation stops with an error saying so.
+
 ## Dialogs and bottom sheets
 
 ```kotlin
@@ -119,7 +121,7 @@ plugins {
 }
 
 dependencies {
-    implementation("com.github.al3j4ndrolm:SnapNavigation:1.0.0")
+    implementation("com.github.al3j4ndrolm:SnapNavigation:1.0.1")
 }
 ```
 

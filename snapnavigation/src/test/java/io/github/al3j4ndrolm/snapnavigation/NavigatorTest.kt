@@ -24,6 +24,12 @@ object Settings : Screen {
     @Composable override fun Content() = Unit
 }
 
+/** Shows the tabs, like an app's main screen after logging in. */
+@Serializable
+object Main : Screen {
+    @Composable override fun Content() = Unit
+}
+
 @Serializable
 data class Profile(val userId: String, val tab: Int = 0) : Screen {
     @Composable override fun Content() = Unit
@@ -41,6 +47,11 @@ class NavigatorTest {
     private val navigator = Navigator(Home) { now }
 
     private fun screens() = navigator.innermost.map { it.screen }
+
+    private fun showTabs(vararg roots: Screen): Tabs {
+        navigator.reset(Main)
+        return navigator.tabsFor(navigator.root.last(), roots.toList())
+    }
 
     private fun later() {
         now += 1_000
@@ -129,7 +140,7 @@ class NavigatorTest {
 
     @Test
     fun `tabs keep separate back stacks`() {
-        val tabs = navigator.tabsFor(navigator.root.last(), listOf(Home, Search, Settings))
+        val tabs = showTabs(Home, Search, Settings)
         navigator.go(Profile("1"))
         assertEquals(listOf(Home, Profile("1")), screens())
 
@@ -145,7 +156,7 @@ class NavigatorTest {
 
     @Test
     fun `back in tabs pops the tab, then goes to the first tab, then leaves`() {
-        navigator.tabsFor(navigator.root.last(), listOf(Home, Search))
+        showTabs(Home, Search)
         navigator.selectTab(1)
         navigator.go(Profile("2"))
         assertTrue(navigator.back())
@@ -157,7 +168,7 @@ class NavigatorTest {
 
     @Test
     fun `tapping the current tab again goes back to its first screen`() {
-        navigator.tabsFor(navigator.root.last(), listOf(Home, Search))
+        showTabs(Home, Search)
         navigator.go(Profile("1")); later()
         navigator.go(Settings)
         navigator.selectTab(0)
@@ -166,7 +177,7 @@ class NavigatorTest {
 
     @Test
     fun `reset leaves the tabs`() {
-        navigator.tabsFor(navigator.root.last(), listOf(Home, Search))
+        showTabs(Home, Search)
         navigator.go(Profile("1"))
         navigator.reset(Settings)
         assertEquals(listOf(Settings), screens())
@@ -175,7 +186,7 @@ class NavigatorTest {
 
     @Test
     fun `saving and restoring, tabs and arguments included`() {
-        navigator.tabsFor(navigator.root.last(), listOf(Home, Search))
+        showTabs(Home, Search)
         navigator.go(Profile("42", tab = 3))
         navigator.selectTab(1)
         val saved = checkNotNull(Saving.save(navigator))
@@ -197,5 +208,21 @@ class NavigatorTest {
         val fresh = Navigator(Home)
         assertFalse(Saving.restore(fresh, "not json"))
         assertEquals(listOf(Home), fresh.root.map { it.screen })
+    }
+
+    @Test
+    fun `a screen with itself as a tab fails with an explanation instead of running out of memory`() {
+        val error = runCatching { navigator.tabsFor(navigator.root.last(), listOf(Home, Search)) }.exceptionOrNull()
+        assertTrue(error is IllegalStateException)
+        assertTrue(error!!.message!!.startsWith("Home shows SnapTabs with Home as one of its tabs"))
+    }
+
+    @Test
+    fun `tabs inside a tab fail with an explanation`() {
+        val tabs = showTabs(Search, Settings)
+        navigator.go(Profile("1"))
+        val error = runCatching { navigator.tabsFor(tabs.current.last(), listOf(Home, Search)) }.exceptionOrNull()
+        assertTrue(error is IllegalStateException)
+        assertTrue(error!!.message!!.startsWith("Profile shows SnapTabs, but it's already inside a tab"))
     }
 }
