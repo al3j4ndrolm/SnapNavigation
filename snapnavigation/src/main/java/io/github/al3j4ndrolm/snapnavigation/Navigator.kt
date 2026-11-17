@@ -1,0 +1,150 @@
+package io.github.al3j4ndrolm.snapnavigation
+
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.SnapshotStateList
+import kotlinx.coroutines.CompletableDeferred
+import java.util.UUID
+
+/** One screen in a back stack. [id] keeps two copies of the same screen apart. */
+internal class Entry(
+    val screen: Screen,
+    val id: String = UUID.randomUUID().toString(),
+    val pushedAt: Long = 0,
+) {
+    /** Tabs shown by this screen with [SnapTabs], created the first time they're shown. */
+    var tabs: Tabs? by mutableStateOf(null)
+
+    /** Completed with the screen's result when it's removed; set by [SnapNavigation.goForResult]. */
+    var result: CompletableDeferred<Any?>? = null
+    var resultValue: Any? = null
+
+    /** Called once the screen leaves the back stack: hands back its result, if anyone waits for one. */
+    fun finish() {
+        result?.complete(resultValue)
+        result = null
+        tabs?.stacks?.forEach { stack -> stack.forEach { it.finish() } }
+    }
+
+    override fun toString(): String = "Entry($screen)"
+}
+
+/** The back stacks of a [SnapTabs]: one per tab, and which tab is showing. */
+internal class Tabs(roots: List<Screen>, now: Long) {
+    val stacks: SnapshotStateList<SnapshotStateList<Entry>> =
+        mutableStateListOf(*roots.map { mutableStateListOf(Entry(it, pushedAt = now)) }.toTypedArray())
+    var selected by mutableIntStateOf(0)
+
+    val current: SnapshotStateList<Entry> get() = stacks[selected]
+}
+
+/**
+ * The app's navigation state: a root back stack whose screens may show tabs, each with its own
+ * back stack. All changes happen on the main thread.
+ */
+internal class Navigator(
+    start: Screen,
+    private val clock: () -> Long = System::currentTimeMillis,
+) {
+    val root: SnapshotStateList<Entry> = mutableStateListOf(Entry(start, pushedAt = clock()))
+
+    /** The back stack that `go` pushes onto: the current tab of the top screen, or the root. */
+    val innermost: SnapshotStateList<Entry>
+        get() = root.last().tabs?.current ?: root
+
+    val current: Screen get() = innermost.last().screen
+
+    fun go(screen: Screen) {
+        val stack = innermost
+        val top = stack.last()
+        // A double tap on a button would open the same screen twice.
+        if (top.screen == screen && clock() - top.pushedAt < DOUBLE_TAP_MILLIS) return
+        stack += Entry(screen, pushedAt = clock())
+    }
+
+    fun goForResult(screen: Screen): CompletableDeferred<Any?> {
+        go(screen)
+        val entry = innermost.last()
+        return CompletableDeferred<Any?>().also { deferred ->
+            if (entry.screen == screen && entry.result == null) entry.result = deferred else deferred.complete(null)
+        }
+    }
+
+    /** Goes back one step. Returns false if there's nowhere to go back to (the app would close). */
+    fun back(result: Any? = null): Boolean {
+        val tabs = root.last().tabs
+        if (tabs != null) {
+            if (tabs.current.size > 1) {
+                tabs.current.pop(result)
+                return true
+            }
+            // At a tab's first screen, back goes to the first tab before leaving the tabs.
+            if (tabs.selected != 0) {
+                tabs.selected = 0
+                return true
+            }
+        }
+        if (root.size > 1) {
+            root.pop(result)
+            return true
+        }
+        return false
+    }
+
+    /** Goes back until the newest screen matching [predicate] is on top. */
+    fun backTo(inclusive: Boolean, predicate: (Screen) -> Boolean): Boolean {
+        for (stack in listOfNotNull(root.last().tabs?.current, root)) {
+            val index = stack.indexOfLast { predicate(it.screen) }
+            if (index < 0) continue
+            val keep = if (inclusive) maxOf(index, 1) else index + 1
+            while (stack.size > keep) stack.pop()
+            return true
+        }
+        return false
+    }
+
+    fun replace(screen: Screen) {
+        val stack = innermost
+        val removed = stack.removeAt(stack.lastIndex)
+        stack += Entry(screen, pushedAt = clock())
+        removed.finish()
+    }
+
+    /** Clears everything, tabs included, and starts again from [screen]. */
+    fun reset(screen: Screen) {
+        val removed = root.toList()
+        root.clear()
+        root += Entry(screen, pushedAt = clock())
+        removed.forEach { it.finish() }
+    }
+
+    fun selectTab(index: Int) {
+        val tabs = root.last().tabs ?: throw IllegalStateException("The current screen doesn't show tabs")
+        require(index in tabs.stacks.indices) { "There's no tab $index" }
+        if (tabs.selected == index) {
+            // Tapping the current tab again goes back to its first screen.
+            while (tabs.current.size > 1) tabs.current.pop()
+        } else {
+            tabs.selected = index
+        }
+    }
+
+    /** The tabs for [entry], created with [roots] the first time (or restored). */
+    fun tabsFor(entry: Entry, roots: List<Screen>): Tabs {
+        entry.tabs?.let { if (it.stacks.size == roots.size) return it }
+        return Tabs(roots, clock()).also { entry.tabs = it }
+    }
+
+    private fun SnapshotStateList<Entry>.pop(result: Any? = null) {
+        val entry = removeAt(lastIndex)
+        if (result != null) entry.resultValue = result
+        entry.finish()
+    }
+
+    companion object {
+        const val DOUBLE_TAP_MILLIS = 700L
+    }
+}

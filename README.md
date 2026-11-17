@@ -1,0 +1,144 @@
+# SnapNavigation
+
+[![JitPack](https://jitpack.io/v/al3j4ndrolm/SnapNavigation.svg)](https://jitpack.io/#al3j4ndrolm/SnapNavigation)
+[![Build](https://github.com/al3j4ndrolm/SnapNavigation/actions/workflows/build.yml/badge.svg)](https://github.com/al3j4ndrolm/SnapNavigation/actions/workflows/build.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
+**Jetpack Compose navigation with zero setup.** No NavHost, no routes, no NavController to pass around.
+
+From the maker of the Facilis family: [FacilisCam](https://github.com/al3j4ndrolm/FacilisCam), [FacilisAI](https://github.com/al3j4ndrolm/FacilisAI) and more.
+
+```kotlin
+@Serializable
+data class Profile(val userId: String) : Screen {
+    @Composable override fun Content() {
+        Text("User $userId")
+        Button(onClick = { nav.back() }) { Text("Back") }
+    }
+}
+
+// MainActivity: the whole setup
+setContent { SnapNav(start = Home) }
+
+// Anywhere: a click, a ViewModel, a coroutine
+nav.go(Profile("42"))
+```
+
+A screen draws itself, so there's nothing to register. Arguments are typed properties: no route strings, no `Bundle`s.
+
+## Moving around
+
+```kotlin
+nav.go(Settings)              // open on top
+nav.back()                    // like the back gesture
+nav.backTo<Home>()            // back until Home is on top
+nav.replace(Checkout)         // swap the current screen
+nav.reset(Login)              // clear everything, e.g. after logging out
+```
+
+`nav` works from composables, click handlers and ViewModels (`nav.go(...)` after a login succeeds, even before the screen is up). A double tap opens a screen once, not twice.
+
+## Results
+
+```kotlin
+// Ask
+scope.launch {
+    val color = nav.goForResult<String>(ColorPicker) ?: return@launch   // null if closed without a result
+}
+
+// Answer
+nav.back(result = "Green")
+```
+
+## Tabs, each with its own history
+
+```kotlin
+SnapTabs(
+    Tab(Feed, "Feed", Icons.Default.Home),
+    Tab(Search, "Search", Icons.Default.Search),
+    Tab(Account, "Account", Icons.Default.Person),
+)
+```
+
+That's a bottom bar where every tab keeps its place, like Instagram: open a profile in Search, switch to Feed and back, and the profile is still there. `nav.go` opens screens in the current tab. Back goes back within the tab, then to the first tab, then leaves. Tapping the current tab again returns to its first screen.
+
+Use it as the whole app, or inside a screen after a login:
+
+```kotlin
+@Serializable object Main : Screen {
+    @Composable override fun Content() = SnapTabs(Tab(Feed, ...), Tab(Account, ...))
+}
+
+nav.reset(Main)   // after logging in; nav.reset(Login) to log out
+```
+
+## Dialogs and bottom sheets
+
+```kotlin
+@Serializable data class DeletePost(val id: Int) : DialogScreen { ... }
+@Serializable object Filters : SheetScreen { ... }
+
+nav.go(Filters)   // a Material bottom sheet; back or swiping down closes it
+```
+
+## Per screen
+
+```kotlin
+@Serializable object Player : Screen {
+    override val hidesTabs get() = true                 // full screen over the tab bar
+    override val transition get() = Transition.SlideUp  // Default, Fade, SlideUp or None
+    @Composable override fun Content() { ... }
+}
+```
+
+## Included
+
+- Android's animations and the predictive back gesture (Android 14+)
+- `viewModel()` inside a screen belongs to that screen, and is cleared when it closes
+- `rememberSaveable` and scroll positions kept per screen, and per tab
+- The back stack, tabs included, survives rotation and Android closing your app in the background
+
+## Install
+
+Add JitPack to `settings.gradle.kts`:
+
+```kotlin
+dependencyResolutionManagement {
+    repositories {
+        google()
+        mavenCentral()
+        maven("https://jitpack.io")
+    }
+}
+```
+
+Then (min SDK 24):
+
+```kotlin
+plugins {
+    id("org.jetbrains.kotlin.plugin.serialization") version "<your Kotlin version>"
+}
+
+dependencies {
+    implementation("com.github.al3j4ndrolm:SnapNavigation:1.0.0")
+}
+```
+
+## Good to know
+
+- **Mark screens `@Serializable`.** That's how the back stack is saved. A screen that isn't still works, but the back stack then starts over if Android closes your app in the background (with a log warning). Keep arguments small: ids, not whole objects.
+- **ViewModels** survive rotation, not Android closing the app. Use `SavedStateHandle` in them for what must survive that.
+- **`goForResult`** waits in a coroutine, which ends if Android closes the app while the other screen is open.
+- **Built on** Google's [Navigation 3](https://developer.android.com/guide/navigation/navigation-3), so the back stack, animations and predictive back are the official ones.
+
+## Contributing
+
+```bash
+./gradlew :snapnavigation:testDebugUnitTest :snapnavigation:assembleRelease :sample:assembleDebug
+```
+
+`snapnavigation/` is the library and `sample/` a demo app: a login, then tabs with a feed, post details, a color picker sheet, a delete dialog and a full-screen player.
+
+## License
+
+[MIT](LICENSE)
