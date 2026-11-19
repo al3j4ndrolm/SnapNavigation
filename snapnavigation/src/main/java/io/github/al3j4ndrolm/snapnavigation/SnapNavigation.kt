@@ -31,6 +31,10 @@ object SnapNavigation {
     @JvmStatic
     val stack: List<Screen> get() = navigator?.innermost?.map { it.screen }.orEmpty()
 
+    /** The index of the tab showing in the [SnapTabs] on screen, or null if there are no tabs. */
+    @JvmStatic
+    val selectedTab: Int? get() = navigator?.root?.last()?.tabs?.selected
+
     /** Whether [back] would stay in the app. */
     @JvmStatic
     val canGoBack: Boolean

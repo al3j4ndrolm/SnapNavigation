@@ -6,10 +6,6 @@ import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.material3.Icon
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -71,34 +67,40 @@ class Tab(val screen: Screen, val label: String, val icon: ImageVector)
  *
  * Use it as the whole app, or inside a screen (e.g. after a login screen). `nav.go` opens
  * screens in the current tab; back goes back within the tab, then to the first tab.
+ *
+ * @param bar how the bar looks: [TabBar.Material] (the default), a ready-made style such as
+ * `TabBar.Liquid()` with any colors you like, or your own with [TabBar.Custom].
  */
 @Composable
-fun SnapTabs(vararg tabs: Tab, modifier: Modifier = Modifier) {
+fun SnapTabs(vararg tabs: Tab, modifier: Modifier = Modifier, bar: TabBar = TabBar.Material) {
     require(tabs.isNotEmpty()) { "SnapTabs needs at least one tab" }
     val entry = LocalEntry.current
     if (entry == null) {
         // The whole app is tabs: put them in a root screen so nav.reset(...) can still leave them.
-        CompositionLocalProvider(LocalTabsForRoot provides tabs.toList()) {
+        CompositionLocalProvider(LocalTabsForRoot provides RootTabs(tabs.toList(), bar)) {
             SnapNav(start = TabsRoot, modifier = modifier)
         }
     } else {
-        TabsContent(entry, tabs.toList(), modifier)
+        TabsContent(entry, tabs.toList(), bar, modifier)
     }
 }
+
+private class RootTabs(val tabs: List<Tab>, val bar: TabBar)
 
 /** The root screen of an app that is all tabs. */
 @Serializable
 internal object TabsRoot : Screen {
     @Composable
     override fun Content() {
-        TabsContent(checkNotNull(LocalEntry.current), LocalTabsForRoot.current, Modifier)
+        val root = LocalTabsForRoot.current
+        TabsContent(checkNotNull(LocalEntry.current), root.tabs, root.bar, Modifier)
     }
 
     override val transition: Transition get() = Transition.None
 }
 
 @Composable
-private fun TabsContent(entry: Entry, tabs: List<Tab>, modifier: Modifier) {
+private fun TabsContent(entry: Entry, tabs: List<Tab>, bar: TabBar, modifier: Modifier) {
     val navigator = checkNotNull(LocalNavigator.current) { "SnapTabs must be shown inside SnapNav" }
     val state = remember(entry) { navigator.tabsFor(entry, tabs.map { it.screen }) }
 
@@ -120,16 +122,7 @@ private fun TabsContent(entry: Entry, tabs: List<Tab>, modifier: Modifier) {
             onBack = { nav.back() },
         )
         if (!state.current.last().screen.hidesTabs) {
-            NavigationBar {
-                tabs.forEachIndexed { index, tab ->
-                    NavigationBarItem(
-                        selected = index == state.selected,
-                        onClick = { nav.selectTab(index) },
-                        icon = { Icon(tab.icon, contentDescription = null) },
-                        label = { Text(tab.label) },
-                    )
-                }
-            }
+            bar.Content(tabs, state.selected) { nav.selectTab(it) }
         }
     }
 }
@@ -159,7 +152,7 @@ private val LocalNavigator = staticCompositionLocalOf<Navigator?> { null }
 /** The back stack entry whose screen is being drawn. */
 internal val LocalEntry = staticCompositionLocalOf<Entry?> { null }
 
-private val LocalTabsForRoot = staticCompositionLocalOf<List<Tab>> { emptyList() }
+private val LocalTabsForRoot = staticCompositionLocalOf { RootTabs(emptyList(), TabBar.Material) }
 
 /** Keeps the navigator through rotation, and saves it for when Android closes the app in the background. */
 internal class NavigatorViewModel(start: Screen, handle: SavedStateHandle) : ViewModel() {

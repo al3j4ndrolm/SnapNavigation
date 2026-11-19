@@ -73,6 +73,52 @@ nav.reset(Main)   // after logging in; nav.reset(Login) to log out
 
 `Main` only holds the tabs. It can't be one of its own tabs, or each tab would show the tabs again; SnapNavigation stops with an error saying so.
 
+## Tab bar styles
+
+The bar is Material's by default. Pick another look with `bar`:
+
+```kotlin
+SnapTabs(
+    Tab(Feed, "Feed", Icons.Default.Home),
+    Tab(Search, "Search", Icons.Default.Search),
+    Tab(Account, "Account", Icons.Default.Person),
+    bar = TabBar.Liquid(),
+)
+```
+
+| Style | What it does |
+| --- | --- |
+| `TabBar.Material` | The standard Material 3 bar (default) |
+| `TabBar.Notched()` | The selected tab floats in a circle; the bar bends around it and the bend slides along |
+| `TabBar.CenterButton(icon, label) { }` | A big button in the middle for your main action, with the bar bent around it |
+| `TabBar.Liquid()` | A blob behind the selected icon that stretches like liquid as it moves |
+| `TabBar.Bump()` | The bar bulges up and the selected tab rises into it with its label |
+| `TabBar.Expanding()` | The selected tab grows into a pill with its label |
+| `TabBar.Spotlight()` | A lamp slides along the top and shines on the selected tab |
+| `TabBar.ColorReveal()` | Each tab has a color that floods the bar from the icon you tap |
+| `TabBar.Wave()` | A crest in a thin line glides under the selected tab |
+| `TabBar.Dock()` | App-style tiles on a shelf; the selected one swells, like a desktop dock |
+| `TabBar.Flip()` | The selected tab flips over in 3D to show its label |
+| `TabBar.Aurora()` | A turning rainbow rim and a glow behind the selected tab |
+
+Every color is a parameter, with good defaults:
+
+```kotlin
+bar = TabBar.Notched(barColor = Color(0xFF1B1B1F), circleColor = Color(0xFF00BFA5))
+bar = TabBar.ColorReveal(colors = listOf(Color.Red, Color.Blue, Color.Green))
+bar = TabBar.CenterButton(Icons.Default.Add, "New post", buttonColor = Color.Black) { nav.go(NewPost) }
+```
+
+Or draw your own and keep everything else (a back stack per tab, back to the first tab, `hidesTabs`):
+
+```kotlin
+bar = TabBar.Custom { tabs, selected, select ->
+    MyBar(tabs, selected, onClick = select)
+}
+```
+
+`nav.selectedTab` tells you which tab is showing, from anywhere.
+
 ## Dialogs and bottom sheets
 
 ```kotlin
@@ -121,7 +167,7 @@ plugins {
 }
 
 dependencies {
-    implementation("com.github.al3j4ndrolm:SnapNavigation:1.0.1")
+    implementation("com.github.al3j4ndrolm:SnapNavigation:1.1.0")
 }
 ```
 
@@ -138,7 +184,7 @@ dependencies {
 ./gradlew :snapnavigation:testDebugUnitTest :snapnavigation:assembleRelease :sample:assembleDebug
 ```
 
-`snapnavigation/` is the library and `sample/` a demo app: a login, then tabs with a feed, post details, a color picker sheet, a delete dialog and a full-screen player.
+`snapnavigation/` is the library and `sample/` a demo app: a login, then tabs with a feed, post details, a color picker sheet, a delete dialog, a full-screen player, and every tab bar style to switch between on the Account tab.
 
 ## License
 

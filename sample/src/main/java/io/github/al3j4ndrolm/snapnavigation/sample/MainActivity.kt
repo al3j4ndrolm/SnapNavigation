@@ -53,6 +53,12 @@ import io.github.al3j4ndrolm.snapnavigation.Tab
 import io.github.al3j4ndrolm.snapnavigation.Transition
 import io.github.al3j4ndrolm.snapnavigation.nav
 import kotlinx.coroutines.launch
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material3.FilterChip
+import io.github.al3j4ndrolm.snapnavigation.TabBar
 import kotlinx.serialization.Serializable
 
 class MainActivity : ComponentActivity() {
@@ -78,6 +84,23 @@ object Login : Screen {
     }
 }
 
+/** The bar styles to try, picked on the Account tab. */
+private val bars: List<Pair<String, TabBar>> = listOf(
+    "Material" to TabBar.Material,
+    "Notched" to TabBar.Notched(),
+    "Center button" to TabBar.CenterButton(Icons.Default.Add, "New post") { nav.go(NewPost) },
+    "Liquid" to TabBar.Liquid(),
+    "Bump" to TabBar.Bump(),
+    "Expanding" to TabBar.Expanding(),
+    "Spotlight" to TabBar.Spotlight(),
+    "Color reveal" to TabBar.ColorReveal(),
+    "Wave" to TabBar.Wave(),
+    "Dock" to TabBar.Dock(),
+    "Flip" to TabBar.Flip(),
+    "Aurora" to TabBar.Aurora(),
+)
+private var barStyle by mutableIntStateOf(0)
+
 @Serializable
 object Main : Screen {
     @Composable
@@ -85,7 +108,30 @@ object Main : Screen {
         SnapTabs(
             Tab(Feed, "Feed", Icons.Default.Home),
             Tab(Search, "Search", Icons.Default.Search),
+            Tab(Saved, "Saved", Icons.Default.Favorite),
             Tab(Account, "Account", Icons.Default.Person),
+            bar = bars[barStyle].second,
+        )
+    }
+}
+
+@Serializable
+object Saved : Screen {
+    @Composable
+    override fun Content() = Page("Saved") {
+        Text("A fourth tab, so the center button has two tabs on each side.")
+    }
+}
+
+@Serializable
+object NewPost : DialogScreen {
+    @Composable
+    override fun Content() {
+        AlertDialog(
+            onDismissRequest = { nav.back() },
+            title = { Text("New post") },
+            text = { Text("Opened by the center button with nav.go(NewPost).") },
+            confirmButton = { TextButton(onClick = { nav.back() }) { Text("Done") } },
         )
     }
 }
@@ -184,10 +230,17 @@ data class Profile(val name: String) : Screen {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Serializable
 object Account : Screen {
     @Composable
     override fun Content() = Page("Account") {
+        Text("Bar style", style = MaterialTheme.typography.titleMedium)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            bars.forEachIndexed { i, (name, _) ->
+                FilterChip(selected = barStyle == i, onClick = { barStyle = i }, label = { Text(name) })
+            }
+        }
         Button(onClick = { nav.go(Player) }) { Text("Open player (full screen)") }
         OutlinedButton(onClick = { nav.reset(Login) }) { Text("Log out") }
     }
