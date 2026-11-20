@@ -3,9 +3,22 @@ package io.github.al3j4ndrolm.snapnavigation
 import android.os.Bundle
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.composed
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -114,18 +127,67 @@ private fun TabsContent(entry: Entry, tabs: List<Tab>, bar: TabBar, modifier: Mo
     )
     val decorated = state.stacks.map { stack -> rememberDecoratedNavEntries(stack.toList(), decorators, ::navEntry) }
 
-    Column(modifier.fillMaxSize()) {
-        NavDisplay(
-            entries = decorated[state.selected],
-            modifier = Modifier.weight(1f).fillMaxWidth(),
-            sceneStrategies = listOf(DialogSceneStrategy(), SheetSceneStrategy()),
-            onBack = { nav.back() },
-        )
-        if (!state.current.last().screen.hidesTabs) {
-            bar.Content(tabs, state.selected) { nav.selectTab(it) }
+    val showBar = !state.current.last().screen.hidesTabs
+    // One layout for every bar, so changing the style never moves the screens (and their state).
+    // Floating bars go over the screens, and tabBarPadding() keeps content clear of them;
+    // other bars get their own space below the screens.
+    var barHeight by remember { mutableIntStateOf(0) }
+    val padding = with(LocalDensity.current) { if (showBar && bar.floating) barHeight.toDp() else 0.dp }
+    val floating = bar.floating
+    Layout(
+        modifier = modifier.fillMaxSize(),
+        content = {
+            Box {
+                CompositionLocalProvider(LocalTabBarPadding provides padding) {
+                    NavDisplay(
+                        entries = decorated[state.selected],
+                        modifier = Modifier.fillMaxSize(),
+                        sceneStrategies = listOf(DialogSceneStrategy(), SheetSceneStrategy()),
+                        onBack = { nav.back() },
+                    )
+                }
+            }
+            if (showBar) {
+                Box(Modifier.onSizeChanged { barHeight = it.height }) {
+                    bar.Content(tabs, state.selected) { nav.selectTab(it) }
+                }
+            }
+        },
+    ) { measurables, constraints ->
+        // The bar is measured first, so the screens get the right size from the first frame.
+        val width = constraints.maxWidth
+        val height = constraints.maxHeight
+        val barPlaceable = measurables.getOrNull(1)?.measure(Constraints(maxWidth = width, maxHeight = height))
+        val barTaken = if (floating) 0 else barPlaceable?.height ?: 0
+        val screens = measurables[0].measure(Constraints.fixed(width, (height - barTaken).coerceAtLeast(0)))
+        layout(width, height) {
+            screens.place(0, 0)
+            barPlaceable?.place((width - barPlaceable.width) / 2, height - barPlaceable.height)
         }
     }
 }
+
+/** How much of the bottom a floating tab bar covers, from the bottom of the screen. */
+internal val LocalTabBarPadding = compositionLocalOf { 0.dp }
+
+/**
+ * Keeps content clear of a floating [SnapTabs] bar: the end of a list, a button at the bottom.
+ * Screens go on behind floating bars (every [TabBar] style but [TabBar.Material]), so this
+ * pads the bottom by the bar's height. It includes the system navigation bar, so there's no
+ * need for `navigationBarsPadding()` too. Does nothing when the bar isn't floating or showing.
+ *
+ * ```
+ * Column(Modifier.fillMaxSize().tabBarPadding()) { ... }
+ * LazyColumn(contentPadding = PaddingValues(bottom = tabBarHeight)) { ... }
+ * ```
+ */
+fun Modifier.tabBarPadding(): Modifier = composed {
+    windowInsetsPadding(WindowInsets(bottom = LocalTabBarPadding.current))
+}
+
+/** How much of the bottom a floating [SnapTabs] bar covers; 0 when it isn't floating or showing. */
+val tabBarHeight: Dp
+    @Composable @ReadOnlyComposable get() = LocalTabBarPadding.current
 
 @Composable
 private fun Stack(stack: List<Entry>, modifier: Modifier) {
@@ -145,7 +207,12 @@ private fun Stack(stack: List<Entry>, modifier: Modifier) {
 private fun navEntry(entry: Entry): NavEntry<Entry> =
     NavEntry(entry, contentKey = entry.id, metadata = metadataFor(entry.screen)) {
         CompositionLocalProvider(LocalEntry provides it) {
-            if (it.screen is DialogScreen || it.screen is SheetScreen) it.screen.Content() else Backdrop { it.screen.Content() }
+            val navigator = LocalNavigator.current
+            if (navigator == null || it.screen is DialogScreen || it.screen is SheetScreen) {
+                it.screen.Content()
+            } else {
+                Covered({ navigator.lastMove }) { it.screen.Content() }
+            }
         }
     }
 

@@ -8,14 +8,17 @@ import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.EnterExitState
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.navigation3.ui.LocalNavAnimatedContentScope
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -62,6 +65,7 @@ private fun transitionsFor(transition: Transition): Map<String, Any> = when (tra
         close = { fadeIn() togetherWith fadeOut() },
     )
     Transition.SlideUp -> animations(
+        // The screen below is cut off at the moving edge by Covered, so it never shows through.
         open = { slideInVertically(tween(MEDIUM)) { it } togetherWith ExitTransition.KeepUntilTransitionsFinished },
         close = { EnterTransition.None togetherWith slideOutVertically(tween(MEDIUM)) { it } },
     )
@@ -71,6 +75,7 @@ private fun transitionsFor(transition: Transition): Map<String, Any> = when (tra
     )
     Transition.Parallax -> animations(
         open = {
+            // The screen below drifts a quarter of the way, and Covered cuts it off where the new one starts.
             slideIntoContainer(Start, tween(MEDIUM)) togetherWith
                 slideOutOfContainer(Start, tween(MEDIUM)) { it / 4 }
         },
@@ -102,9 +107,9 @@ private fun transitionsFor(transition: Transition): Map<String, Any> = when (tra
     Transition.Pop -> animations(
         open = {
             (scaleIn(spring(dampingRatio = 0.6f, stiffness = Spring.StiffnessMediumLow), initialScale = 0.6f) +
-                fadeIn(tween(SHORT))) togetherWith ExitTransition.KeepUntilTransitionsFinished
+                fadeIn(tween(SHORT))) togetherWith fadeOut(tween(SHORT * 2))
         },
-        close = { EnterTransition.None togetherWith (scaleOut(tween(SHORT * 2), targetScale = 0.6f) + fadeOut(tween(SHORT * 2))) },
+        close = { fadeIn(tween(SHORT * 2, delayMillis = SHORT)) togetherWith (scaleOut(tween(SHORT * 2), targetScale = 0.6f) + fadeOut(tween(SHORT * 2))) },
     )
     Transition.None -> animations(
         open = { EnterTransition.None togetherWith ExitTransition.None },
@@ -112,23 +117,49 @@ private fun transitionsFor(transition: Transition): Map<String, Any> = when (tra
     )
 }
 
-private const val SHORT = 90
-private const val MEDIUM = 350
-
 /**
- * Paints the theme's background behind a screen while it animates. Without it, a screen with no
- * background of its own would show the previous screen through it as it slides in over it.
+ * Cuts the screen below off at the edge of a screen sliding over it ([Transition.SlideUp] and
+ * [Transition.Parallax]), so a screen with no background never shows the one below through it.
+ * Painting a background instead can't know the right color (the theme's, a Surface's, the window's).
  */
 @Composable
-internal fun Backdrop(content: @Composable () -> Unit) {
-    val color = MaterialTheme.colorScheme.background
+internal fun Covered(lastMove: () -> Move, content: @Composable () -> Unit) {
     val transition = LocalNavAnimatedContentScope.current.transition
+    // 1 when showing, 0 when gone: in step with the covering screen, which uses the same tween.
+    val shown = transition.animateFloat({ tween(MEDIUM) }, label = "covered") { if (it == EnterExitState.Visible) 1f else 0f }
     Box(
-        Modifier.fillMaxSize().drawBehind {
-            if (transition.isRunning || transition.currentState != transition.targetState) drawRect(color)
+        Modifier.fillMaxSize().drawWithContent {
+            val move = lastMove()
+            val covered = if (move.opening) {
+                transition.targetState == EnterExitState.PostExit
+            } else {
+                transition.targetState == EnterExitState.Visible && transition.currentState != EnterExitState.Visible
+            }
+            val v = shown.value
+            when {
+                !covered || v >= 1f -> drawContent()
+                move.transition == Transition.SlideUp -> clipRect(bottom = size.height * v) { this@drawWithContent.drawContent() }
+                move.transition == Transition.Parallax -> {
+                    // The screen below moves a quarter of the way, so the edge is at 1/4 + 3/4 of what's showing.
+                    val width = size.width * (0.25f + 0.75f * v)
+                    if (layoutDirection == LayoutDirection.Ltr) {
+                        clipRect(right = width) { this@drawWithContent.drawContent() }
+                    } else {
+                        clipRect(left = size.width - width) { this@drawWithContent.drawContent() }
+                    }
+                }
+                else -> drawContent()
+            }
         },
+        propagateMinConstraints = true,
     ) { content() }
 }
+
+/** The last screen that came in ([opening]) or went out, and its transition. */
+internal data class Move(val transition: Transition, val opening: Boolean)
+
+private const val SHORT = 90
+private const val MEDIUM = 350
 
 /** Shows [SheetScreen]s in a Material bottom sheet over the screens below. */
 internal class SheetSceneStrategy<T : Any> : SceneStrategy<T> {

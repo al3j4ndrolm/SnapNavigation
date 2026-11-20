@@ -119,6 +119,18 @@ bar = TabBar.Custom { tabs, selected, select ->
 
 `nav.selectedTab` tells you which tab is showing, from anywhere.
 
+### Content behind the bar
+
+Every style but `Material` floats, so your screens go on behind it and show around it. Keep things clear of the bar with `tabBarPadding()`, or let a list scroll behind it and stop its last item above it with `tabBarHeight`:
+
+```kotlin
+Column(Modifier.fillMaxSize().safeDrawingPadding().tabBarPadding()) { ... }
+
+LazyColumn(contentPadding = PaddingValues(bottom = tabBarHeight)) { ... }
+```
+
+Both are zero with the `Material` bar, which gets its own space below your screens, so they're safe to use with any style. For your own bar, `TabBar.Custom(floating = true) { ... }` floats it too.
+
 ## Dialogs and bottom sheets
 
 ```kotlin
@@ -152,7 +164,7 @@ nav.go(Filters)   // a Material bottom sheet; back or swiping down closes it
 | `Pop` | Pops out of the center with a little bounce |
 | `None` | Appears instantly |
 
-Back plays the transition in reverse, and the back gesture previews it. Screens that slide over another get your theme's background while they move, so the screen below never shows through.
+Back plays the transition in reverse, and the back gesture previews it. Screens that slide over another cut off the one below at their edge, so it never shows through, even when your screens have no background of their own.
 
 ## Included
 
@@ -183,7 +195,7 @@ plugins {
 }
 
 dependencies {
-    implementation("com.github.al3j4ndrolm:SnapNavigation:1.2.0")
+    implementation("com.github.al3j4ndrolm:SnapNavigation:1.3.0")
 }
 ```
 

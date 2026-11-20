@@ -38,8 +38,16 @@ abstract class TabBar {
     @Composable
     abstract fun Content(tabs: List<Tab>, selected: Int, select: (Int) -> Unit)
 
+    /**
+     * Whether screens go on behind the bar, showing around it. True for the floating styles,
+     * false for [Material]. Keep content clear of a floating bar with `Modifier.tabBarPadding()`.
+     */
+    open val floating: Boolean get() = true
+
     /** The standard Material 3 bottom bar. The default. */
     object Material : TabBar() {
+        override val floating: Boolean get() = false
+
         @Composable
         override fun Content(tabs: List<Tab>, selected: Int, select: (Int) -> Unit) {
             NavigationBar {
@@ -215,7 +223,7 @@ abstract class TabBar {
 
     /**
      * Your own bar. SnapTabs still keeps a back stack per tab; you draw the bar and call
-     * `select(index)` when a tab is tapped:
+     * `select(index)` when a tab is tapped. Set [floating] to have screens go on behind it:
      *
      * ```
      * bar = TabBar.Custom { tabs, selected, select ->
@@ -228,6 +236,7 @@ abstract class TabBar {
      * ```
      */
     class Custom(
+        override val floating: Boolean = false,
         val content: @Composable (tabs: List<Tab>, selected: Int, select: (Int) -> Unit) -> Unit,
     ) : TabBar() {
         @Composable

@@ -57,12 +57,16 @@ internal class Navigator(
 
     val current: Screen get() = innermost.last().screen
 
+    /** The last screen that came in or went out, so the one below it can be drawn to match. */
+    var lastMove by mutableStateOf(Move(Transition.Default, opening = true))
+
     fun go(screen: Screen) {
         val stack = innermost
         val top = stack.last()
         // A double tap on a button would open the same screen twice.
         if (top.screen == screen && clock() - top.pushedAt < DOUBLE_TAP_MILLIS) return
         stack += Entry(screen, pushedAt = clock())
+        lastMove = Move(screen.transition, opening = true)
     }
 
     fun goForResult(screen: Screen): CompletableDeferred<Any?> {
@@ -83,6 +87,7 @@ internal class Navigator(
             }
             // At a tab's first screen, back goes to the first tab before leaving the tabs.
             if (tabs.selected != 0) {
+                lastMove = Move(Transition.Default, opening = false)
                 tabs.selected = 0
                 return true
             }
@@ -100,7 +105,10 @@ internal class Navigator(
             val index = stack.indexOfLast { predicate(it.screen) }
             if (index < 0) continue
             val keep = if (inclusive) maxOf(index, 1) else index + 1
+            val top = stack.last().screen
             while (stack.size > keep) stack.pop()
+            // The top screen is the one seen leaving.
+            if (stack.last().screen != top) lastMove = Move(top.transition, opening = false)
             return true
         }
         return false
@@ -110,6 +118,7 @@ internal class Navigator(
         val stack = innermost
         val removed = stack.removeAt(stack.lastIndex)
         stack += Entry(screen, pushedAt = clock())
+        lastMove = Move(screen.transition, opening = true)
         removed.finish()
     }
 
@@ -118,6 +127,7 @@ internal class Navigator(
         val removed = root.toList()
         root.clear()
         root += Entry(screen, pushedAt = clock())
+        lastMove = Move(screen.transition, opening = true)
         removed.forEach { it.finish() }
     }
 
@@ -126,8 +136,11 @@ internal class Navigator(
         require(index in tabs.stacks.indices) { "There's no tab $index" }
         if (tabs.selected == index) {
             // Tapping the current tab again goes back to its first screen.
+            val top = tabs.current.last().screen
             while (tabs.current.size > 1) tabs.current.pop()
+            lastMove = Move(top.transition, opening = false)
         } else {
+            lastMove = Move(Transition.Default, opening = true)
             tabs.selected = index
         }
     }
@@ -159,6 +172,7 @@ internal class Navigator(
 
     private fun SnapshotStateList<Entry>.pop(result: Any? = null) {
         val entry = removeAt(lastIndex)
+        lastMove = Move(entry.screen.transition, opening = false)
         if (result != null) entry.resultValue = result
         entry.finish()
     }

@@ -59,6 +59,14 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material3.FilterChip
 import io.github.al3j4ndrolm.snapnavigation.TabBar
+import io.github.al3j4ndrolm.snapnavigation.tabBarHeight
+import io.github.al3j4ndrolm.snapnavigation.tabBarPadding
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import kotlinx.serialization.Serializable
 
 class MainActivity : ComponentActivity() {
@@ -161,15 +169,19 @@ object NewPost : DialogScreen {
 @Serializable
 object Feed : Screen {
     @Composable
-    override fun Content() = Page("Feed") {
-        LazyColumn {
-            items((1..30).toList()) { id ->
+    override fun Content() {
+        // The list scrolls on behind a floating bar; contentPadding lets its last post clear the bar.
+        Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))) {
+            Text("Feed", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp))
+            LazyColumn(contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = tabBarHeight)) {
+                items((1..30).toList()) { id ->
                 Text(
                     "Post #$id",
                     Modifier.fillMaxWidth().clickable { nav.go(Post(id)) }.padding(vertical = 14.dp),
                 )
                 HorizontalDivider()
             }
+        }
         }
     }
 }
@@ -285,7 +297,7 @@ object Player : Screen {
 @Composable
 private fun Page(title: String, content: @Composable () -> Unit) {
     Column(
-        Modifier.fillMaxSize().safeDrawingPadding().padding(horizontal = 20.dp, vertical = 12.dp),
+        Modifier.fillMaxSize().safeDrawingPadding().tabBarPadding().padding(horizontal = 20.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text(title, style = MaterialTheme.typography.headlineMedium)
