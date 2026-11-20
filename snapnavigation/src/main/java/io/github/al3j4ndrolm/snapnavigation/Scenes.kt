@@ -1,6 +1,21 @@
 package io.github.al3j4ndrolm.snapnavigation
 
+import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.AnimatedContentTransitionScope.SlideDirection.Companion.End
+import androidx.compose.animation.AnimatedContentTransitionScope.SlideDirection.Companion.Start
+import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.navigation3.ui.LocalNavAnimatedContentScope
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -25,27 +40,94 @@ import androidx.navigation3.ui.NavDisplay
 
 /** What Navigation 3 needs to know about [screen]: dialog, sheet and its animation. */
 internal fun metadataFor(screen: Screen): Map<String, Any> {
-    val transitions = when (screen.transition) {
-        Transition.Default -> emptyMap()
-        Transition.Fade ->
-            NavDisplay.transitionSpec { fadeIn() togetherWith fadeOut() } +
-                NavDisplay.popTransitionSpec { fadeIn() togetherWith fadeOut() } +
-                NavDisplay.predictivePopTransitionSpec { fadeIn() togetherWith fadeOut() }
-        Transition.SlideUp ->
-            NavDisplay.transitionSpec { slideInVertically { it } togetherWith ExitTransition.KeepUntilTransitionsFinished } +
-                NavDisplay.popTransitionSpec { EnterTransition.None togetherWith slideOutVertically { it } } +
-                NavDisplay.predictivePopTransitionSpec { EnterTransition.None togetherWith slideOutVertically { it } }
-        Transition.None ->
-            NavDisplay.transitionSpec { EnterTransition.None togetherWith ExitTransition.None } +
-                NavDisplay.popTransitionSpec { EnterTransition.None togetherWith ExitTransition.None } +
-                NavDisplay.predictivePopTransitionSpec { EnterTransition.None togetherWith ExitTransition.None }
-    }
     val kind = when (screen) {
         is DialogScreen -> DialogSceneStrategy.dialog()
         is SheetScreen -> metadata { put(SheetSceneStrategy.SheetKey, true) }
         else -> emptyMap()
     }
-    return transitions + kind
+    return transitionsFor(screen.transition) + kind
+}
+
+private typealias Spec = AnimatedContentTransitionScope<Scene<*>>.() -> ContentTransform
+
+/** [open] when the screen comes in, [close] when it leaves, also used while dragging the back gesture. */
+private fun animations(open: Spec, close: Spec): Map<String, Any> =
+    NavDisplay.transitionSpec(open) + NavDisplay.popTransitionSpec(close) +
+        NavDisplay.predictivePopTransitionSpec { _ -> close() }
+
+private fun transitionsFor(transition: Transition): Map<String, Any> = when (transition) {
+    Transition.Default -> emptyMap()
+    Transition.Fade -> animations(
+        open = { fadeIn() togetherWith fadeOut() },
+        close = { fadeIn() togetherWith fadeOut() },
+    )
+    Transition.SlideUp -> animations(
+        open = { slideInVertically(tween(MEDIUM)) { it } togetherWith ExitTransition.KeepUntilTransitionsFinished },
+        close = { EnterTransition.None togetherWith slideOutVertically(tween(MEDIUM)) { it } },
+    )
+    Transition.Slide -> animations(
+        open = { slideIntoContainer(Start, tween(MEDIUM)) togetherWith slideOutOfContainer(Start, tween(MEDIUM)) },
+        close = { slideIntoContainer(End, tween(MEDIUM)) togetherWith slideOutOfContainer(End, tween(MEDIUM)) },
+    )
+    Transition.Parallax -> animations(
+        open = {
+            slideIntoContainer(Start, tween(MEDIUM)) togetherWith
+                slideOutOfContainer(Start, tween(MEDIUM)) { it / 4 }
+        },
+        close = {
+            slideIntoContainer(End, tween(MEDIUM)) { it / 4 } togetherWith
+                slideOutOfContainer(End, tween(MEDIUM))
+        },
+    )
+    Transition.Zoom -> animations(
+        open = {
+            (fadeIn(tween(MEDIUM - SHORT, delayMillis = SHORT)) + scaleIn(tween(MEDIUM), initialScale = 0.85f)) togetherWith
+                (fadeOut(tween(SHORT)) + scaleOut(tween(MEDIUM), targetScale = 1.1f))
+        },
+        close = {
+            (fadeIn(tween(MEDIUM - SHORT, delayMillis = SHORT)) + scaleIn(tween(MEDIUM), initialScale = 1.1f)) togetherWith
+                (fadeOut(tween(SHORT)) + scaleOut(tween(MEDIUM), targetScale = 0.85f))
+        },
+    )
+    Transition.Rise -> animations(
+        open = {
+            (fadeIn(tween(MEDIUM - SHORT, delayMillis = SHORT)) + slideInVertically(tween(MEDIUM)) { it / 12 }) togetherWith
+                (fadeOut(tween(SHORT)) + slideOutVertically(tween(MEDIUM)) { -it / 12 })
+        },
+        close = {
+            (fadeIn(tween(MEDIUM - SHORT, delayMillis = SHORT)) + slideInVertically(tween(MEDIUM)) { -it / 12 }) togetherWith
+                (fadeOut(tween(SHORT)) + slideOutVertically(tween(MEDIUM)) { it / 12 })
+        },
+    )
+    Transition.Pop -> animations(
+        open = {
+            (scaleIn(spring(dampingRatio = 0.6f, stiffness = Spring.StiffnessMediumLow), initialScale = 0.6f) +
+                fadeIn(tween(SHORT))) togetherWith ExitTransition.KeepUntilTransitionsFinished
+        },
+        close = { EnterTransition.None togetherWith (scaleOut(tween(SHORT * 2), targetScale = 0.6f) + fadeOut(tween(SHORT * 2))) },
+    )
+    Transition.None -> animations(
+        open = { EnterTransition.None togetherWith ExitTransition.None },
+        close = { EnterTransition.None togetherWith ExitTransition.None },
+    )
+}
+
+private const val SHORT = 90
+private const val MEDIUM = 350
+
+/**
+ * Paints the theme's background behind a screen while it animates. Without it, a screen with no
+ * background of its own would show the previous screen through it as it slides in over it.
+ */
+@Composable
+internal fun Backdrop(content: @Composable () -> Unit) {
+    val color = MaterialTheme.colorScheme.background
+    val transition = LocalNavAnimatedContentScope.current.transition
+    Box(
+        Modifier.fillMaxSize().drawBehind {
+            if (transition.isRunning || transition.currentState != transition.targetState) drawRect(color)
+        },
+    ) { content() }
 }
 
 /** Shows [SheetScreen]s in a Material bottom sheet over the screens below. */

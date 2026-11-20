@@ -115,11 +115,31 @@ object Main : Screen {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Serializable
 object Saved : Screen {
     @Composable
     override fun Content() = Page("Saved") {
-        Text("A fourth tab, so the center button has two tabs on each side.")
+        Text("Transitions", style = MaterialTheme.typography.titleMedium)
+        Text("Tap one to open a screen with it. Back plays it in reverse.")
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Transition.entries.forEach { style ->
+                FilterChip(selected = false, onClick = { nav.go(TransitionDemo(style)) }, label = { Text(style.name) })
+            }
+        }
+    }
+}
+
+/** A screen with no background of its own, opened with [style]. */
+@Serializable
+data class TransitionDemo(val style: Transition) : Screen {
+    override val transition get() = style
+
+    @Composable
+    override fun Content() = Page(style.name) {
+        Text("This screen came in with Transition.${style.name}.")
+        Button(onClick = { nav.go(TransitionDemo(style)) }) { Text("Open another") }
+        OutlinedButton(onClick = { nav.back() }) { Text("Back") }
     }
 }
 

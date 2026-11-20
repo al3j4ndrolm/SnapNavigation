@@ -144,7 +144,9 @@ private fun Stack(stack: List<Entry>, modifier: Modifier) {
 
 private fun navEntry(entry: Entry): NavEntry<Entry> =
     NavEntry(entry, contentKey = entry.id, metadata = metadataFor(entry.screen)) {
-        CompositionLocalProvider(LocalEntry provides it) { it.screen.Content() }
+        CompositionLocalProvider(LocalEntry provides it) {
+            if (it.screen is DialogScreen || it.screen is SheetScreen) it.screen.Content() else Backdrop { it.screen.Content() }
+        }
     }
 
 private val LocalNavigator = staticCompositionLocalOf<Navigator?> { null }

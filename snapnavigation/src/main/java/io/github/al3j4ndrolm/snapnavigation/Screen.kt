@@ -37,7 +37,7 @@ interface DialogScreen : Screen
 /** A screen shown as a bottom sheet over the previous one. Back or swiping down closes it. */
 interface SheetScreen : Screen
 
-/** Screen animations. */
+/** Screen animations. Back plays them in reverse, and the back gesture previews them. */
 enum class Transition {
     /** Android's standard animation, including the predictive back gesture preview. */
     Default,
@@ -45,8 +45,23 @@ enum class Transition {
     /** Cross-fade. */
     Fade,
 
-    /** Slides up from the bottom and back down, like a modal. */
+    /** Slides up from the bottom over the previous screen, and back down, like a modal. */
     SlideUp,
+
+    /** Pushes the previous screen out to the side. */
+    Slide,
+
+    /** Slides in from the side over the previous screen, which drifts back a little, like iOS. */
+    Parallax,
+
+    /** Grows in as the previous screen grows past you and fades, like moving deeper into the app. */
+    Zoom,
+
+    /** Rises a little while fading in. Subtle, good for settings and detail pages. */
+    Rise,
+
+    /** Pops out of the center with a little bounce. */
+    Pop,
 
     /** Appears instantly. */
     None,

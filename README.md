@@ -133,10 +133,26 @@ nav.go(Filters)   // a Material bottom sheet; back or swiping down closes it
 ```kotlin
 @Serializable object Player : Screen {
     override val hidesTabs get() = true                 // full screen over the tab bar
-    override val transition get() = Transition.SlideUp  // Default, Fade, SlideUp or None
+    override val transition get() = Transition.SlideUp  // how it comes in and goes out
     @Composable override fun Content() { ... }
 }
 ```
+
+### Transitions
+
+| `Transition.` | Looks like |
+|---|---|
+| `Default` | Android's standard animation |
+| `Fade` | Cross-fade |
+| `SlideUp` | Slides up over the previous screen, like a modal |
+| `Slide` | Pushes the previous screen out to the side |
+| `Parallax` | Slides in over the previous screen, which drifts back a little, like iOS |
+| `Zoom` | Grows in as the previous screen grows past you and fades |
+| `Rise` | Rises a little while fading in |
+| `Pop` | Pops out of the center with a little bounce |
+| `None` | Appears instantly |
+
+Back plays the transition in reverse, and the back gesture previews it. Screens that slide over another get your theme's background while they move, so the screen below never shows through.
 
 ## Included
 
@@ -167,7 +183,7 @@ plugins {
 }
 
 dependencies {
-    implementation("com.github.al3j4ndrolm:SnapNavigation:1.1.0")
+    implementation("com.github.al3j4ndrolm:SnapNavigation:1.2.0")
 }
 ```
 
